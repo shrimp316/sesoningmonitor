@@ -2,7 +2,7 @@ name: Blog Monitor
 
 on:
   schedule:
-    - cron: "0 * * * *"  # 매 1시간마다 실행
+    - cron: "*/30 * * * *"  # 매 30분 마다 실행
   workflow_dispatch:       # 수동 실행도 가능
 
 env:
