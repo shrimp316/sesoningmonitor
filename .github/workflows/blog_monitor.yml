@@ -38,11 +38,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add blog_state.json
+          git add blog_state.json data/latest_post.json
           git stash list | grep -q . && STASHED=1 || STASHED=0
           git stash
           git pull --rebase origin main
           [ "$STASHED" = "1" ] && git stash pop || true
-          git add blog_state.json
+          git add blog_state.json data/latest_post.json
           git diff --cached --quiet || git commit -m "chore: update blog state"
           git push origin main
