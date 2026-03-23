@@ -119,6 +119,20 @@ def main():
     if new_posts or modified_posts:
         send_email(new_posts, modified_posts)
 
+    # 최신 글 정보를 latest_post.json에 저장 (홈페이지 배너용)
+    if current_posts:
+        latest = current_posts[0]
+        import datetime
+        latest_data = {
+            "title": latest["title"],
+            "url": latest["url"],
+            "updated_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        }
+        os.makedirs("data", exist_ok=True)
+        with open("data/latest_post.json", "w", encoding="utf-8") as f:
+            json.dump(latest_data, f, ensure_ascii=False, indent=2)
+        print(f"latest_post.json 업데이트: {latest['title']}")
+
     save_state(new_state)
 
 
