@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,7 +35,10 @@ jobs:
         run: python check_blog.py
 
       - name: Save state
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update blog state"
-          file_pattern: blog_state.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add blog_state.json
+          git diff --cached --quiet || git commit -m "chore: update blog state"
+          git push origin main
