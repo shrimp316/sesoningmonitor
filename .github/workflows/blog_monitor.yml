@@ -2,7 +2,7 @@ name: Blog Monitor
 
 on:
   schedule:
-    - cron: "*/30 * * * *"  # 매 30분 마다 실행
+    - cron: "*/30 * * * *"  # 매 1시간마다 실행
   workflow_dispatch:       # 수동 실행도 가능
 
 env:
@@ -39,9 +39,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add blog_state.json
+          git stash list | grep -q . && STASHED=1 || STASHED=0
           git stash
           git pull --rebase origin main
-          git stash pop
+          [ "$STASHED" = "1" ] && git stash pop || true
           git add blog_state.json
           git diff --cached --quiet || git commit -m "chore: update blog state"
           git push origin main
