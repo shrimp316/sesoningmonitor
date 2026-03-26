@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import re
 import hashlib
 import smtplib
 from email.mime.text import MIMEText
@@ -36,15 +37,35 @@ def fetch_posts():
 
 
 def fetch_post_hash(url):
-    """각 글의 본문 내용을 가져와서 해시값 생성"""
+    """본문 텍스트만 추출해서 해시 생성 (동적 요소 제거)"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.text, "html.parser")
 
-        for tag in soup(["script", "style", "nav", "footer", "header"]):
+        # 동적/불필요 태그 전부 제거
+        for tag in soup(["script", "style", "nav", "footer", "header",
+                         "iframe", "noscript", "meta", "link"]):
             tag.decompose()
-        content = soup.get_text(separator=" ", strip=True)
+
+        # data-*, id, class 속성 제거 (세션/토큰 등 동적 값 포함 가능)
+        for tag in soup.find_all(True):
+            for attr in list(tag.attrs):
+                if attr.startswith("data-") or attr in ("id", "class"):
+                    del tag[attr]
+
+        # 본문 영역만 추출
+        article = (
+            soup.find("article") or
+            soup.find(attrs={"role": "main"}) or
+            soup.find("main") or
+            soup.body
+        )
+
+        content = article.get_text(separator=" ", strip=True) if article else ""
+
+        # 공백 정규화
+        content = re.sub(r'\s+', ' ', content).strip()
 
         return hashlib.md5(content.encode("utf-8")).hexdigest()
     except Exception as e:
@@ -121,8 +142,8 @@ def main():
 
     # 최신 글 정보를 latest_post.json에 저장 (홈페이지 배너용)
     if current_posts:
-        latest = current_posts[0]
         import datetime
+        latest = current_posts[0]
         latest_data = {
             "title": latest["title"],
             "url": latest["url"],
