@@ -1,4 +1,5 @@
 import requests
+import urllib3
 from bs4 import BeautifulSoup
 import json
 import os
@@ -8,17 +9,19 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 URL = "https://www.seasoninggames.com/ko/blog"
 STATE_FILE = "blog_state.json"
 
-GMAIL_USER = os.environ["GMAIL_USER"]
-GMAIL_PASSWORD = os.environ["GMAIL_PASSWORD"]
-NOTIFY_EMAIL = os.environ["NOTIFY_EMAIL"]
+GMAIL_USER = os.environ.get("GMAIL_USER", "")
+GMAIL_PASSWORD = os.environ.get("GMAIL_PASSWORD", "")
+NOTIFY_EMAIL = os.environ.get("NOTIFY_EMAIL", "")
 
 
 def fetch_posts():
     headers = {"User-Agent": "Mozilla/5.0"}
-    res = requests.get(URL, headers=headers, timeout=15)
+    res = requests.get(URL, headers=headers, timeout=15, verify=False)
     soup = BeautifulSoup(res.text, "html.parser")
 
     posts = []
@@ -40,7 +43,7 @@ def fetch_post_hash(url):
     """본문 텍스트만 추출해서 해시 생성 (동적 요소 제거)"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
-        res = requests.get(url, headers=headers, timeout=15)
+        res = requests.get(url, headers=headers, timeout=15, verify=False)
         soup = BeautifulSoup(res.text, "html.parser")
 
         # 동적/불필요 태그 전부 제거
