@@ -64,8 +64,8 @@ def fetch_post_content(url):
             soup.body
         )
 
-        content = article.get_text(separator="\n", strip=True) if article else ""
-        content = re.sub(r'\n{3,}', '\n\n', content).strip()
+        content = article.get_text(separator=" ", strip=True) if article else ""
+        content = re.sub(r'\s+', ' ', content).strip()
 
         content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
         return content_hash, content[:CONTENT_MAX_LEN]
