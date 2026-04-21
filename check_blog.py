@@ -1,5 +1,6 @@
 import requests
 import urllib3
+import difflib
 from bs4 import BeautifulSoup
 import json
 import os
@@ -13,6 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 URL = "https://www.seasoninggames.com/ko/blog"
 STATE_FILE = "blog_state.json"
+CONTENT_MAX_LEN = 3000
 
 GMAIL_USER = os.environ.get("GMAIL_USER", "")
 GMAIL_PASSWORD = os.environ.get("GMAIL_PASSWORD", "")
@@ -39,25 +41,22 @@ def fetch_posts():
     return posts
 
 
-def fetch_post_hash(url):
-    """본문 텍스트만 추출해서 해시 생성 (동적 요소 제거)"""
+def fetch_post_content(url):
+    """본문 텍스트와 해시를 함께 반환 (hash, content)"""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers, timeout=15, verify=False)
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # 동적/불필요 태그 전부 제거
         for tag in soup(["script", "style", "nav", "footer", "header",
                          "iframe", "noscript", "meta", "link"]):
             tag.decompose()
 
-        # data-*, id, class 속성 제거 (세션/토큰 등 동적 값 포함 가능)
         for tag in soup.find_all(True):
             for attr in list(tag.attrs):
                 if attr.startswith("data-") or attr in ("id", "class"):
                     del tag[attr]
 
-        # 본문 영역만 추출
         article = (
             soup.find("article") or
             soup.find(attrs={"role": "main"}) or
@@ -65,15 +64,28 @@ def fetch_post_hash(url):
             soup.body
         )
 
-        content = article.get_text(separator=" ", strip=True) if article else ""
+        content = article.get_text(separator="\n", strip=True) if article else ""
+        content = re.sub(r'\n{3,}', '\n\n', content).strip()
 
-        # 공백 정규화
-        content = re.sub(r'\s+', ' ', content).strip()
-
-        return hashlib.md5(content.encode("utf-8")).hexdigest()
+        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+        return content_hash, content[:CONTENT_MAX_LEN]
     except Exception as e:
-        print(f"해시 생성 실패 ({url}): {e}")
-        return None
+        print(f"콘텐츠 가져오기 실패 ({url}): {e}")
+        return None, ""
+
+
+def get_diff_summary(old_text, new_text, max_lines=10):
+    """변경 전/후 텍스트 비교 후 변경분 요약 반환"""
+    old_lines = old_text.splitlines()
+    new_lines = new_text.splitlines()
+    diff = list(difflib.unified_diff(old_lines, new_lines, lineterm="", n=0))
+    changes = [l for l in diff if l.startswith(("+", "-")) and not l.startswith(("---", "+++"))]
+    if not changes:
+        return "(변경 내용을 추출할 수 없음)"
+    summary = "\n".join(changes[:max_lines])
+    if len(changes) > max_lines:
+        summary += f"\n... 외 {len(changes) - max_lines}줄 변경"
+    return summary
 
 
 def load_state():
@@ -101,10 +113,13 @@ def send_email(new_posts, modified_posts):
         body += "🆕 새로운 글:\n"
         for p in new_posts:
             body += f"  📌 {p['title']}\n  {p['url']}\n\n"
+
     if modified_posts:
         body += "✏️ 수정된 글:\n"
         for p in modified_posts:
+            diff_text = get_diff_summary(p.get("old_content", ""), p.get("new_content", ""))
             body += f"  📝 {p['title']}\n  {p['url']}\n\n"
+            body += f"  [변경 내용]\n{diff_text}\n\n"
 
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
@@ -128,14 +143,18 @@ def main():
 
     for post in current_posts:
         url = post["url"]
-        current_hash = fetch_post_hash(url)
-        new_state[url] = {"title": post["title"], "hash": current_hash}
+        current_hash, current_content = fetch_post_content(url)
+        new_state[url] = {"title": post["title"], "hash": current_hash, "content": current_content}
 
         if url not in previous_state:
             new_posts.append(post)
             print(f"새 글: {post['title']}")
         elif previous_state[url].get("hash") != current_hash:
-            modified_posts.append(post)
+            modified_posts.append({
+                **post,
+                "old_content": previous_state[url].get("content", ""),
+                "new_content": current_content,
+            })
             print(f"수정됨: {post['title']}")
         else:
             print(f"변경 없음: {post['title']}")
@@ -143,7 +162,6 @@ def main():
     if new_posts or modified_posts:
         send_email(new_posts, modified_posts)
 
-    # 최신 글 정보를 latest_post.json에 저장 (홈페이지 배너용)
     if current_posts:
         import datetime
         latest = current_posts[0]
