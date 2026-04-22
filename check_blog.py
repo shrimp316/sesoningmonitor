@@ -64,8 +64,9 @@ def fetch_post_content(url):
             soup.body
         )
 
-        content = article.get_text(separator=" ", strip=True) if article else ""
-        content = re.sub(r'\s+', ' ', content).strip()
+        content = article.get_text(separator="\n", strip=True) if article else ""
+        lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in content.splitlines()]
+        content = "\n".join(line for line in lines if line)
 
         content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
         return content_hash, content[:CONTENT_MAX_LEN]
@@ -78,6 +79,10 @@ def get_diff_summary(old_text, new_text, max_lines=10):
     """변경 전/후 텍스트 비교 후 변경분 요약 반환"""
     old_lines = old_text.splitlines()
     new_lines = new_text.splitlines()
+    # 기존 state가 한 줄짜리(구버전)인 경우 단어 단위로 폴백
+    if len(old_lines) <= 1 and len(new_lines) <= 1:
+        old_lines = old_text.split()
+        new_lines = new_text.split()
     diff = list(difflib.unified_diff(old_lines, new_lines, lineterm="", n=0))
     changes = [l for l in diff if l.startswith(("+", "-")) and not l.startswith(("---", "+++"))]
     if not changes:
